@@ -1,0 +1,57 @@
+# IMSAI 8080esp /tty gateway - sample configuration
+#
+# Precedence (highest first): CLI flags > env vars (IMSAI_GW_*) > this file > defaults.
+# Load with:  imsai-gw --config imsai-gw.toml
+# If a file named imsai-gw.toml sits in the working directory, it is loaded automatically.
+#
+# Keys may be at top level (as below) or under a [gateway] table.
+# Every key is optional; omitted keys fall back to the built-in default shown here.
+
+# --- target device (the IMSAI 8080esp) ---
+# host is REQUIRED and has no default: set your IMSAI host name (mDNS/DNS) or IP here, or pass
+# --host / IMSAI_GW_HOST. The gateway exits with an error if host is not set anywhere.
+#host       = "imsai8080"      # e.g. "imsai8080", "imsai8080.local", or "192.168.1.50"
+ws_port     = 80               # WebSocket/HTTP port on the device
+
+# --- inbound terminal listener ---
+listen_host = "0.0.0.0"        # bind address: all interfaces (LAN). NO AUTH, so set "127.0.0.1"
+                               # (local only) on an untrusted network, or firewall the port.
+listen_port = 2323             # TCP port terminals connect to (default 2323 if omitted)
+
+# --- terminal handling ---
+mode        = "auto"           # "auto" | "telnet" | "raw"
+                               #   auto  : negotiate Telnet when the client sends IAC
+                               #   telnet: negotiate on connect (WILL ECHO / WILL SGA)
+                               #   raw   : passthrough, no Telnet negotiation
+eol         = "cr"             # Enter sent to CP/M: "cr" | "crlf" | "lf" | "raw"
+                               #   cr  : normalize CR/CRLF/CRNUL/LF to a single CR (CP/M)
+                               #   raw : no line-ending rewrite (needed for binary/XMODEM)
+crlf_out    = true             # output: convert a bare LF to CR LF (like a real terminal /
+                               # xterm convertEol). Set false for 8-bit binary transfers.
+cols        = 80               # output: emulate auto-wrap at this column (the CP/M console is
+                               # 80 wide). Fixes apps (e.g. Rogue) that redraw the screen as an
+                               # 80-col blob and "staircase" on a wider terminal. 0 = disable.
+framing     = "binary"         # TCP->WS frames: "binary" (8-bit clean) | "text" (7-bit)
+
+# --- input pacing (mimics the WebUI; not required for correctness) ---
+throttle    = true             # pace TCP->WS, one char per frame
+cr_delay    = 0.100            # seconds to wait after a CR (code 13)
+char_delay  = 0.020            # seconds to wait after any other char
+
+# --- session policy ---
+max_sessions = 1               # concurrent terminal sessions the gateway accepts
+
+# --- WS auto-reconnect (when the DEVICE drops the /tty socket) ---
+reconnect       = true         # keep the client and retry the WS on a device-side drop
+reconnect_delay = 2.0          # seconds between reconnection attempts
+reconnect_max   = 0            # max attempts, 0 = unlimited
+
+# --- control TUI (disks + front panel) ---
+tui         = true             # enable the in-terminal control TUI (Ctrl+\)
+hotkey      = "Ctrl+\\"        # key that opens the TUI. Recommended: a single Ctrl+<key>
+                               # (one byte, reliable). Forms accepted: "Ctrl+\\", "Ctrl+]",
+                               # "Ctrl+^", "Ctrl+G", and (less reliable, ESC-prefixed)
+                               # "Alt+P", "Shift+Alt+X", "Ctrl+Alt+Z".
+
+# --- logging ---
+log_level   = "INFO"           # DEBUG | INFO | WARNING | ERROR

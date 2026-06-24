@@ -1,0 +1,4 @@
+# Keep the build context tiny: only the Go module and the default config are needed.
+*
+!gateway-go
+!imsai-gw.toml

@@ -1,0 +1,131 @@
+# TEMPLATE, not an active workflow. GitHub Actions only runs files under .github/workflows/, so
+# this file does nothing in THIS (private) repo. The publish-mirror workflow copies it into the
+# PUBLIC repo as .github/workflows/build.yml, where it becomes the public repo's real build
+# workflow (this is the existing build with the image renamed to imsai-tty-gateway).
+
+name: build
+
+# Builds the Go gateway via a Docker image (no local toolchain needed) and produces, per
+# target, a deliverable containing the executable + the default imsai-gw.toml.
+#
+# - Workflow artifacts (every push/PR): upload-artifact wraps the loose files in ONE zip
+#   (we do NOT pre-zip, otherwise the download would be a zip-inside-a-zip).
+# - Release assets (on a v* tag): we build a single clean zip per target (folder + files)
+#   and attach it to the GitHub Release.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,   goarch: amd64, goarm: "",  name: linux-amd64,   ext: "" }
+          - { goos: linux,   goarch: arm64, goarm: "",  name: linux-arm64,   ext: "" }
+          - { goos: linux,   goarch: arm,   goarm: "7", name: linux-armv7,   ext: "" }
+          - { goos: windows, goarch: amd64, goarm: "",  name: windows-amd64, ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build binary via Docker
+        run: |
+          docker buildx build \
+            --build-arg TARGETOS=${{ matrix.goos }} \
+            --build-arg TARGETARCH=${{ matrix.goarch }} \
+            --build-arg GOARM=${{ matrix.goarm }} \
+            --target artifact \
+            --output type=local,dest=build \
+            .
+
+      - name: Stage package files
+        run: |
+          pkg="imsai-gw-${{ matrix.name }}"
+          mkdir -p "dist/$pkg"
+          cp "build/imsai-gw" "dist/$pkg/imsai-gw${{ matrix.ext }}"
+          cp imsai-gw.toml "dist/$pkg/"
+          cp README.md "dist/$pkg/" 2>/dev/null || true
+
+      # upload-artifact zips the contents once -> downloading gives a single zip of files.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: imsai-gw-${{ matrix.name }}
+          path: dist/imsai-gw-${{ matrix.name }}/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts   # -> artifacts/<artifact-name>/<files>
+
+      - name: Zip each target (single clean zip per platform)
+        run: |
+          cd artifacts
+          for d in */; do
+            name="${d%/}"
+            zip -r "${name}.zip" "$name"
+          done
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: artifacts/*.zip
+
+  # Build and push the runnable Linux image (multi-arch) to GHCR.
+  # ghcr.io/<owner>/imsai-tty-gateway : tag 'latest' on master, semver tags on v* releases.
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Don't upload the ".dockerbuild" build-record artifact (clutters the run).
+      DOCKER_BUILD_RECORD_UPLOAD: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        name: Compute image tags
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/imsai-tty-gateway
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push image (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false   # no SBOM/provenance attestation -> no "unknown/unknown" entry
+          sbom: false
