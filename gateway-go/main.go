@@ -15,7 +15,7 @@ import (
 // with the release tag used by CI (e.g. v0.1).
 const (
 	productName = "IMSAI 8080 esp Replica - TTY Gateway Control"
-	version     = "0.3.4"
+	version     = "0.3.5"
 )
 
 // Minimal leveled logging: lines are formatted as "<LEVEL> gateway <msg>".
@@ -38,6 +38,8 @@ func main() {
 	cfg := buildConfig()
 	log.SetFlags(log.LstdFlags)
 	setLogLevel(cfg.LogLevel)
+
+	logf("INFO", "IMSAI TTY Gateway v%s started", version)
 
 	g := &Gateway{cfg: cfg}
 	if err := g.serve(); err != nil {
