@@ -1,8 +1,11 @@
 # IMSAI 8080esp Telnet/TCP ↔ WebSocket `/tty` Gateway
 
 <!-- Demo: a ~20 s capture of a terminal session through the gateway.
-     Place the file at assets/demo.gif (relative path so it renders on GitHub and offline). -->
-![Live demo of a CP/M session over the gateway](assets/demo.gif)
+     The video is hosted on GitHub (user-attachments), not committed to the repo, so it adds no
+     weight to the repository or the mirror. To set it: open a new GitHub issue (or edit this file
+     in the GitHub web editor), drag-and-drop demo.mp4 into the text area, let GitHub upload it,
+     then copy the generated https://github.com/user-attachments/assets/... URL into src below. -->
+<video src="https://github.com/user-attachments/assets/REPLACE-WITH-UPLOADED-MP4-URL" controls width="800"></video>
 
 Connect any VT-100 terminal (PuTTY, `telnet`, minicom, cool-retro-term, …) to the CP/M console
 of an IMSAI 8080esp over plain TCP, without a browser.
