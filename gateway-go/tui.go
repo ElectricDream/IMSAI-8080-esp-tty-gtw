@@ -549,8 +549,22 @@ func (s *bridgeSession) doMount() {
 	file := m.libView[m.libSel]
 	drive := m.libFor
 	m.mode = tmDisks
+	// The firmware refuses to mount the same image on a second drive (it returns HTTP 404,
+	// the same code as a missing image). Catch the duplicate ourselves so the message is
+	// clear and names the drive already using it.
+	for _, dr := range m.disks {
+		if dr.ID != drive && dr.Image == file {
+			m.status = fmt.Sprintf("%s is already mounted in drive %s (one image cannot be mounted twice)", file, dr.ID)
+			return
+		}
+	}
 	if err := mountDisk(s.cfg, drive, file); err != nil {
-		m.status = err.Error()
+		// 404 here (past the duplicate check above) means the device cannot find the image.
+		if strings.Contains(err.Error(), "HTTP 404") {
+			m.status = fmt.Sprintf("cannot mount %s: image not found on device", file)
+		} else {
+			m.status = err.Error()
+		}
 		return
 	}
 	s.refreshDisks()
