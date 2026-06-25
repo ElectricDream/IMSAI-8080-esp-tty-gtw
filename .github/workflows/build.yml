@@ -15,9 +15,8 @@ name: build
 
 on:
   push:
-    branches: [master]
-    tags: ['v*']
-  pull_request:
+    tags: ['v*']     # releases only; the mirror's master push must NOT trigger a 2nd build
+  pull_request:      # validate contributor PRs (builds, never pushes the image)
   workflow_dispatch:
 
 jobs:
@@ -86,7 +85,8 @@ jobs:
           files: artifacts/*.zip
 
   # Build and push the runnable Linux image (multi-arch) to GHCR.
-  # ghcr.io/<owner>/imsai-tty-gateway : tag 'latest' on master, semver tags on v* releases.
+  # ghcr.io/<owner>/imsai-tty-gateway : on a v* release, pushes the semver tags AND 'latest'
+  # (latest=auto in metadata-action). 'latest' therefore tracks the newest released version.
   image:
     runs-on: ubuntu-latest
     permissions:
@@ -112,11 +112,10 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/imsai-tty-gateway
+          # latest=auto (metadata-action default) adds 'latest' for the semver tag push.
           tags: |
-            type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push image (linux/amd64, linux/arm64)
         uses: docker/build-push-action@v7
@@ -124,7 +123,7 @@ jobs:
           context: .
           target: runtime
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}   # publish only on a v* release
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false   # no SBOM/provenance attestation -> no "unknown/unknown" entry
