@@ -31,6 +31,10 @@ crlf_out    = true             # output: convert a bare LF to CR LF (like a real
 cols        = 80               # output: emulate auto-wrap at this column (the CP/M console is
                                # 80 wide). Fixes apps (e.g. Rogue) that redraw the screen as an
                                # 80-col blob and "staircase" on a wider terminal. 0 = disable.
+resize      = "80x24"          # on connect, ask the client to size its window to <cols>x<rows>
+                               # (XTWINOPS). VT-100/CP/M assume 80x24; a narrower window wraps
+                               # full-width output (e.g. Zork's status line). Honored by
+                               # xterm-class terminals; others ignore it harmlessly. "off" = disable.
 framing     = "binary"         # TCP->WS frames: "binary" (8-bit clean) | "text" (7-bit)
 
 # --- input pacing (mimics the WebUI; not required for correctness) ---

@@ -1,5 +1,9 @@
 # IMSAI 8080esp Telnet/TCP ↔ WebSocket `/tty` Gateway
 
+<!-- Demo: a ~20 s capture of a terminal session through the gateway.
+     Place the file at assets/demo.gif (relative path so it renders on GitHub and offline). -->
+![Live demo of a CP/M session over the gateway](assets/demo.gif)
+
 Connect any VT-100 terminal (PuTTY, `telnet`, minicom, cool-retro-term, …) to the CP/M console
 of an IMSAI 8080esp over plain TCP, without a browser.
 
@@ -167,6 +171,7 @@ IMSAI_GW_HOST=192.168.1.50 ./imsai-tty-gateway
 | eol | `--eol` | `IMSAI_GW_EOL` | `cr` | Enter sent to CP/M as `cr` / `crlf` / `lf` / `raw` |
 | crlf_out | `--no-crlf-out` | `IMSAI_GW_CRLF_OUT` | on | output: bare LF to CR LF (turn off for binary) |
 | cols | `--cols` | `IMSAI_GW_COLS` | `80` | output: emulate auto-wrap at column N (0 = off) |
+| resize | `--resize` | `IMSAI_GW_RESIZE` | `80x24` | ask the client to size its window to `<cols>x<rows>` on connect (`off` = disable) |
 | framing | `--framing` | `IMSAI_GW_FRAMING` | `binary` | TCP-to-WS frames: `binary` (8-bit) / `text` (7-bit) |
 | throttle | `--no-throttle` | `IMSAI_GW_THROTTLE` | on | pace TCP-to-WS input |
 | cr_delay | `--cr-delay` | `IMSAI_GW_CR_DELAY` | `0.100` | delay after a CR, seconds |
@@ -190,6 +195,12 @@ Run `./imsai-tty-gateway --help` for the full list.
   and output is wrapped to emulate an 80-column console (tracking the cursor through ANSI
   sequences). This keeps full-screen apps that rely on auto-wrap looking correct on wider
   terminals. Turn both off with `--no-crlf-out` / `--cols 0` for binary transfers.
+- **Window size**: the CP/M console and its VT-100 apps assume an 80x24 screen (the size the
+  WebUI's terminal is fixed at). On connect the gateway asks the client to size its window to
+  80x24, so a window that is narrower than 80 columns does not wrap full-width output (for
+  example a game's reverse-video status line spilling onto the next row). Terminals that support
+  this resize (most xterm-family emulators) apply it; others ignore it with no ill effect. Change
+  the geometry with `--resize 100x30`, or disable it with `--resize off`.
 - **Telnet**: in `auto` and `telnet` modes the gateway announces `WILL ECHO` + `WILL SGA` on
   connect and parses/strips IAC sequences, so the client runs in character mode with no
   double-echo and no raw IAC bytes leaking to the screen; CP/M provides the echo.

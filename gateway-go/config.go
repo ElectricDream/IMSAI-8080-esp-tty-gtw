@@ -22,6 +22,9 @@ type Config struct {
 	EOL            string // cr | crlf | lf | raw  (keystrokes TCP->WS)
 	CRLFOut        bool   // WS->TCP: convert bare LF to CR LF (ONLCR; like xterm convertEol)
 	Cols           int    // WS->TCP: emulate auto-wrap at this column (0=off; 80 = CP/M console)
+	Resize         string // request client window geometry on connect (XTWINOPS), e.g. "80x24"; "off" disables
+	ResizeCols     int    // parsed Resize columns (0 = disabled)
+	ResizeRows     int    // parsed Resize rows
 	Framing        string // binary | text
 	Throttle       bool
 	CRDelay        float64
@@ -47,6 +50,7 @@ func defaultConfig() Config {
 		EOL:        "cr",
 		CRLFOut:    true,
 		Cols:       80,
+		Resize:     "80x24", // VT-100 console geometry; clients that ignore XTWINOPS are unaffected
 		Framing:    "binary",
 		Throttle:   true,
 		CRDelay:    0.100,
@@ -103,6 +107,26 @@ func parseHotkey(spec string) ([]byte, error) {
 		return []byte{0x1B, ch}, nil
 	}
 	return []byte{ch}, nil
+}
+
+// parseResize parses a window geometry like "80x24" into columns and rows. The values
+// "off"/"none"/"no"/"0"/"false"/"" disable the feature (cols=rows=0).
+func parseResize(spec string) (cols, rows int, err error) {
+	s := strings.ToLower(strings.TrimSpace(spec))
+	switch s {
+	case "", "off", "none", "no", "0", "false":
+		return 0, 0, nil
+	}
+	parts := strings.Split(s, "x")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("expected <cols>x<rows> (e.g. 80x24) or off")
+	}
+	c, e1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	r, e2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if e1 != nil || e2 != nil || c <= 0 || r <= 0 {
+		return 0, 0, fmt.Errorf("invalid geometry %q (expected positive <cols>x<rows>)", spec)
+	}
+	return c, r, nil
 }
 
 func fatal(msg string) {
@@ -233,6 +257,8 @@ func buildConfig() Config {
 		"(disable for 8-bit binary transfers; env IMSAI_GW_CRLF_OUT=0)")
 	fCols := fs.Int("cols", def.Cols, "emulate output auto-wrap at this column, 0=off "+
 		"(80 = CP/M console; fixes Rogue on wide terminals; env IMSAI_GW_COLS)")
+	fResize := fs.String("resize", def.Resize, "request client window size on connect via XTWINOPS, "+
+		"e.g. 80x24; 'off' to disable (env IMSAI_GW_RESIZE)")
 	fFraming := fs.String("framing", def.Framing, "binary|text (env IMSAI_GW_FRAMING)")
 	fNoThrottle := fs.Bool("no-throttle", false, "disable TCP->WS pacing (env IMSAI_GW_THROTTLE=0)")
 	fCRDelay := fs.Float64("cr-delay", def.CRDelay, "seconds after CR (env IMSAI_GW_CR_DELAY)")
@@ -287,6 +313,9 @@ func buildConfig() Config {
 		if v, ok := fileInt(fc, "cols"); ok {
 			cfg.Cols = v
 		}
+		if v, ok := fileStr(fc, "resize"); ok {
+			cfg.Resize = v
+		}
 		if v, ok := fileStr(fc, "framing"); ok {
 			cfg.Framing = v
 		}
@@ -331,6 +360,7 @@ func buildConfig() Config {
 	envStr("EOL", &cfg.EOL)
 	envBool("CRLF_OUT", &cfg.CRLFOut)
 	envInt("COLS", &cfg.Cols)
+	envStr("RESIZE", &cfg.Resize)
 	envStr("FRAMING", &cfg.Framing)
 	envBool("THROTTLE", &cfg.Throttle)
 	envFloat("CR_DELAY", &cfg.CRDelay)
@@ -369,6 +399,9 @@ func buildConfig() Config {
 	}
 	if set["cols"] {
 		cfg.Cols = *fCols
+	}
+	if set["resize"] {
+		cfg.Resize = *fResize
 	}
 	if set["framing"] {
 		cfg.Framing = *fFraming
@@ -410,6 +443,12 @@ func buildConfig() Config {
 	if strings.TrimSpace(cfg.Host) == "" {
 		fatal("host is required: set the IMSAI host name or IP via --host, the IMSAI_GW_HOST " +
 			"env var, or 'host' in imsai-gw.toml (e.g. --host imsai8080 or --host 192.168.1.50)")
+	}
+
+	if rc, rr, err := parseResize(cfg.Resize); err != nil {
+		fatal(fmt.Sprintf("invalid resize %q: %v", cfg.Resize, err))
+	} else {
+		cfg.ResizeCols, cfg.ResizeRows = rc, rr
 	}
 
 	cfg.LogLevel = strings.ToUpper(cfg.LogLevel)

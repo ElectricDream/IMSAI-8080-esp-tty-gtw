@@ -15,7 +15,7 @@ import (
 // with the release tag used by CI (e.g. v0.1).
 const (
 	productName = "IMSAI 8080 esp Replica - TTY Gateway Control"
-	version     = "0.3.7"
+	version     = "0.3.8"
 )
 
 // Minimal leveled logging: lines are formatted as "<LEVEL> gateway <msg>".

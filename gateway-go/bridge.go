@@ -393,6 +393,20 @@ func (g *Gateway) handleClient(conn net.Conn) {
 						break
 					}
 				}
+				// Best-effort: request the client window geometry (VT-100 is 80x24, the size the
+				// CP/M console and the WebUI's xterm assume). Without this, a client narrower than
+				// 80 columns wraps full-width output (e.g. Zork's reverse-video status line bleeds
+				// onto the next row). XTWINOPS (ESC[8;rows;cols t) is honored by xterm-class
+				// terminals; one that does not support it parses the CSI and ignores it silently,
+				// so there is no garbage and no regression. Disable with --resize off.
+				if g.cfg.ResizeCols > 0 {
+					resize := fmt.Sprintf("\x1b[8;%d;%dt", g.cfg.ResizeRows, g.cfg.ResizeCols)
+					if _, e := conn.Write([]byte(resize)); e != nil {
+						reason = "client TCP write failed"
+						ws.Close()
+						break
+					}
+				}
 				// Open /cpa ONCE, right after the first /tty connect (while idle), and KEEP it
 				// for the whole session. The device allows one client per channel and RECONNECTING
 				// /cpa restarts its web server, so we must never reopen it. Done before the banner
