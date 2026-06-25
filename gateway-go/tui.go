@@ -74,6 +74,8 @@ const (
 	kDown
 	kLeft
 	kRight
+	kPageUp
+	kPageDown
 )
 
 type key struct {
@@ -81,10 +83,12 @@ type key struct {
 	ch   byte
 }
 
-// keyDecoder turns a byte stream into key events, handling CR/LF, lone Esc, and the
-// CSI/SS3 arrow sequences (ESC [ A.. / ESC O A..) that may span multiple reads.
+// keyDecoder turns a byte stream into key events, handling CR/LF, lone Esc, the CSI/SS3 arrow
+// sequences (ESC [ A.. / ESC O A..) and the tilde-terminated keys Page Up (ESC [ 5 ~) and Page
+// Down (ESC [ 6 ~), any of which may span multiple reads.
 type keyDecoder struct {
-	esc int // 0 = none, 1 = saw ESC, 2 = saw ESC[ or ESC O
+	esc   int    // 0 = none, 1 = saw ESC, 2 = saw ESC[ or ESC O
+	param []byte // CSI numeric parameter collected in state 2 (e.g. "5" for Page Up)
 }
 
 func (d *keyDecoder) decode(data []byte) []key {
@@ -108,6 +112,7 @@ func (d *keyDecoder) decode(data []byte) []key {
 		case 1:
 			if b == '[' || b == 'O' {
 				d.esc = 2
+				d.param = d.param[:0]
 			} else {
 				keys = append(keys, key{kind: kEsc})
 				d.esc = 0
@@ -131,10 +136,21 @@ func (d *keyDecoder) decode(data []byte) []key {
 			case b == 'D':
 				keys = append(keys, key{kind: kLeft})
 				d.esc = 0
-			case (b >= '0' && b <= '9') || b == ';':
-				// CSI parameter bytes; keep collecting
+			case b == '~':
+				// tilde-terminated key: 5 = Page Up, 6 = Page Down (others ignored)
+				switch string(d.param) {
+				case "5":
+					keys = append(keys, key{kind: kPageUp})
+				case "6":
+					keys = append(keys, key{kind: kPageDown})
+				}
+				d.esc = 0
+			case b >= '0' && b <= '9':
+				d.param = append(d.param, b) // CSI numeric parameter; keep collecting
+			case b == ';':
+				// multi-parameter separator; keep collecting (ignored for our keys)
 			default:
-				d.esc = 0 // end of an unhandled sequence (e.g. '~') -> ignore
+				d.esc = 0 // end of an unhandled sequence -> ignore
 			}
 		}
 	}
@@ -186,7 +202,31 @@ type tuiModel struct {
 	confirmMsg string
 	confirmAct func() // run on 'y'
 	status     string
+	pageStep   int // visible content rows of the active pane, set at render; used by Page Up/Down
 	dec        keyDecoder
+}
+
+// step returns the Page Up/Down jump size (a screenful), with a sane fallback before the first
+// render has measured the window.
+func (m *tuiModel) step() int {
+	if m.pageStep > 0 {
+		return m.pageStep
+	}
+	return 10
+}
+
+// clampIndex bounds i to a valid index in a list of n items: [0, n-1], or 0 when empty.
+func clampIndex(i, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	if i < 0 {
+		return 0
+	}
+	if i > n-1 {
+		return n - 1
+	}
+	return i
 }
 
 // panelSwitch is one front-panel command switch (momentary: up/down send a /cpa code, the
@@ -310,7 +350,7 @@ func (s *bridgeSession) tuiKey(k key) bool {
 	// Navigation keys clear any lingering status message so the key hints reappear on the bottom
 	// bar while browsing (the bar shows either the hint OR a status/confirm message, never both).
 	switch k.kind {
-	case kUp, kDown, kLeft, kRight:
+	case kUp, kDown, kLeft, kRight, kPageUp, kPageDown:
 		m.status = ""
 	}
 	switch m.mode {
@@ -324,6 +364,10 @@ func (s *bridgeSession) tuiKey(k key) bool {
 			if m.sel < len(m.disks)-1 {
 				m.sel++
 			}
+		case kPageUp:
+			m.sel = clampIndex(m.sel-m.step(), len(m.disks))
+		case kPageDown:
+			m.sel = clampIndex(m.sel+m.step(), len(m.disks))
 		case kEnter:
 			s.openLibrary()
 		case kEsc:
@@ -382,6 +426,10 @@ func (s *bridgeSession) tuiKey(k key) bool {
 			if m.sysScroll < len(m.sysLines)-1 {
 				m.sysScroll++
 			}
+		case kPageUp:
+			m.sysScroll = clampIndex(m.sysScroll-m.step(), len(m.sysLines))
+		case kPageDown:
+			m.sysScroll = clampIndex(m.sysScroll+m.step(), len(m.sysLines))
 		case kEsc:
 			return true
 		case kChar:
@@ -404,6 +452,10 @@ func (s *bridgeSession) tuiKey(k key) bool {
 			if m.libItemSel < len(m.libItems)-1 {
 				m.libItemSel++
 			}
+		case kPageUp:
+			m.libItemSel = clampIndex(m.libItemSel-m.step(), len(m.libItems))
+		case kPageDown:
+			m.libItemSel = clampIndex(m.libItemSel+m.step(), len(m.libItems))
 		case kEnter:
 			s.doPreview()
 		case kEsc:
@@ -433,6 +485,10 @@ func (s *bridgeSession) tuiKey(k key) bool {
 			if m.prevScroll < len(m.prevLines)-1 {
 				m.prevScroll++
 			}
+		case kPageUp:
+			m.prevScroll = clampIndex(m.prevScroll-m.step(), len(m.prevLines))
+		case kPageDown:
+			m.prevScroll = clampIndex(m.prevScroll+m.step(), len(m.prevLines))
 		case kLeft:
 			s.previewSetUser(m.prevUserIdx - 1)
 		case kRight:
@@ -456,6 +512,10 @@ func (s *bridgeSession) tuiKey(k key) bool {
 			if m.libSel < len(m.libView)-1 {
 				m.libSel++
 			}
+		case kPageUp:
+			m.libSel = clampIndex(m.libSel-m.step(), len(m.libView))
+		case kPageDown:
+			m.libSel = clampIndex(m.libSel+m.step(), len(m.libView))
 		case kEnter:
 			s.doMount()
 		case kEsc:
@@ -782,6 +842,14 @@ func (s *bridgeSession) tuiDraw() {
 	}
 	w := cols - 1
 
+	// Page Up/Down jump size: roughly one screenful (window height minus title, tab bar, a
+	// header, and the bottom hint/status overhead). At least 1.
+	if ps := rows - 6; ps > 0 {
+		m.pageStep = ps
+	} else {
+		m.pageStep = 1
+	}
+
 	var b strings.Builder
 	b.WriteString(ansiClear)
 	b.WriteString(moveTo(1, 1))
@@ -849,7 +917,7 @@ func (s *bridgeSession) tuiDraw() {
 			}
 			row++
 		}
-		hint = "Up/Dn select   Enter mount   q/Esc back"
+		hint = "Up/Dn/PgUp/PgDn   Enter mount   q/Esc back"
 	case tmLib:
 		b.WriteString(moveTo(row, 1) + fmt.Sprintf("Library (%d images):", len(m.libItems)))
 		row += 2
@@ -879,7 +947,7 @@ func (s *bridgeSession) tuiDraw() {
 			}
 			row++
 		}
-		hint = "Up/Dn select   Enter/v view   d delete   r refresh   Tab disks   q quit"
+		hint = "Up/Dn/PgUp/PgDn   Enter/v view   d delete   r refresh   Tab disks   q quit"
 	case tmLibPreview:
 		visible := rows - row - 2
 		if visible < 1 {
@@ -901,7 +969,7 @@ func (s *bridgeSession) tuiDraw() {
 		if len(m.prevUsers) > 1 {
 			userNav = fmt.Sprintf("   Left/Right user (%d/%d)", m.prevUserIdx+1, len(m.prevUsers))
 		}
-		hint = "Up/Dn scroll" + more + userNav + "   q/Esc back"
+		hint = "Up/Dn/PgUp/PgDn scroll" + more + userNav + "   q/Esc back"
 	case tmPanel:
 		row = s.drawPanel(&b, row)
 		hint = "Left/Right select   Up/Dn actuate   r refresh   Tab SYS   q quit"
@@ -922,7 +990,7 @@ func (s *bridgeSession) tuiDraw() {
 			more = fmt.Sprintf("   [%d-%d/%d]", m.sysScroll+1,
 				min(m.sysScroll+visible, len(m.sysLines)), len(m.sysLines))
 		}
-		hint = "Up/Dn scroll" + more + "   r refresh   Tab LIB   q quit"
+		hint = "Up/Dn/PgUp/PgDn scroll" + more + "   r refresh   Tab LIB   q quit"
 	}
 
 	// Single bottom line: a confirm/status message takes over the bar, otherwise the key hints
