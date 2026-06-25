@@ -1,4 +1,4 @@
-// Command imsai-gw bridges an inbound Telnet/TCP terminal connection to the IMSAI 8080esp
+// Command imsai-tty-gateway bridges an inbound Telnet/TCP terminal connection to the IMSAI 8080esp
 // console WebSocket (ws://<host>/tty): raw or Telnet on the TCP side, a WebSocket client on
 // the device side, with line-ending normalization, throttling, single-session policy and
 // automatic reconnect. See README.md for usage and the design notes (e.g. no WS keepalive ping:
@@ -15,7 +15,7 @@ import (
 // with the release tag used by CI (e.g. v0.1).
 const (
 	productName = "IMSAI 8080 esp Replica - TTY Gateway Control"
-	version     = "0.3.1"
+	version     = "0.3.2"
 )
 
 // Minimal leveled logging: lines are formatted as "<LEVEL> gateway <msg>".

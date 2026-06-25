@@ -1,7 +1,7 @@
 # IMSAI 8080esp /tty gateway - sample configuration
 #
 # Precedence (highest first): CLI flags > env vars (IMSAI_GW_*) > this file > defaults.
-# Load with:  imsai-gw --config imsai-gw.toml
+# Load with:  imsai-tty-gateway --config imsai-gw.toml
 # If a file named imsai-gw.toml sits in the working directory, it is loaded automatically.
 #
 # Keys may be at top level (as below) or under a [gateway] table.

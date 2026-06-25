@@ -48,17 +48,17 @@ jobs:
 
       - name: Stage package files
         run: |
-          pkg="imsai-gw-${{ matrix.name }}"
+          pkg="imsai-tty-gateway-${{ matrix.name }}"
           mkdir -p "dist/$pkg"
-          cp "build/imsai-gw" "dist/$pkg/imsai-gw${{ matrix.ext }}"
+          cp "build/imsai-tty-gateway" "dist/$pkg/imsai-tty-gateway${{ matrix.ext }}"
           cp imsai-gw.toml "dist/$pkg/"
           cp README.md "dist/$pkg/" 2>/dev/null || true
 
       # upload-artifact zips the contents once -> downloading gives a single zip of files.
       - uses: actions/upload-artifact@v7
         with:
-          name: imsai-gw-${{ matrix.name }}
-          path: dist/imsai-gw-${{ matrix.name }}/*
+          name: imsai-tty-gateway-${{ matrix.name }}
+          path: dist/imsai-tty-gateway-${{ matrix.name }}/*
           if-no-files-found: error
 
   release:

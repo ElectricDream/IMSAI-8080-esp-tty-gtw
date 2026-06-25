@@ -3,9 +3,7 @@
 Connect any VT-100 terminal (PuTTY, `telnet`, minicom, cool-retro-term, …) to the CP/M console
 of an IMSAI 8080esp over plain TCP, without a browser.
 
-```
-[VT100 terminal] --TCP (telnet or raw)--> [gateway] --WS client--> ws://<imsai>/tty
-```
+![A VT-100 terminal connects over TCP (telnet or raw) to the imsai-tty-gateway, which connects as a WebSocket client to ws://<host>/tty on the IMSAI 8080esp.](assets/architecture.svg)
 
 The IMSAI firmware exposes its console only as a WebSocket (`ws://<host>/tty`) and has no Telnet
 server for it (port 23 is the emulated Hayes modem, off by default). The gateway sits in between:
@@ -16,13 +14,13 @@ runtime to install.
 
 ## Get it
 
-- **Release zip**: download `imsai-gw-<os>-<arch>.zip` from the project's GitHub Releases
+- **Release zip**: download `imsai-tty-gateway-<os>-<arch>.zip` from the project's GitHub Releases
   (`linux-amd64`, `linux-arm64`, `linux-armv7` for Raspberry Pi, `windows-amd64`). Each zip
   contains the executable plus a default `imsai-gw.toml`.
 - **Container image**: `ghcr.io/electricdream/imsai-tty-gateway:latest` (multi-arch `linux/amd64`,
   `linux/arm64`). Pinned version tags such as `:0.3.0` and `:0.3` are also published.
 
-On Windows the executable is `imsai-gw.exe`.
+On Windows the executable is `imsai-tty-gateway.exe`.
 
 ## Quick start
 
@@ -37,7 +35,7 @@ from you is your IMSAI's address.
 **1. Start the gateway, pointing it at your IMSAI** (use your own device's IP here):
 
 ```sh
-./imsai-gw --host 192.168.1.50
+./imsai-tty-gateway --host 192.168.1.50
 ```
 
 **2. Connect a terminal to the gateway** on port 2323. If your terminal is on the *same machine*
@@ -66,7 +64,7 @@ and `RUN` state; what you do next depends on it:
 
 On the gateway side, `--host` is the **only** required setting. Everything else has a sensible
 default, so the gateway listens on all network interfaces on port `2323` out of the box. If you
-prefer not to type anything, put `host` in `imsai-gw.toml` and run `./imsai-gw` with no arguments
+prefer not to type anything, put `host` in `imsai-gw.toml` and run `./imsai-tty-gateway` with no arguments
 at all (see
 [Configuration](#configuration)).
 
@@ -97,7 +95,7 @@ docker run --rm -p 2323:2323 \
     ghcr.io/electricdream/imsai-tty-gateway:latest --config /etc/imsai-gw.toml
 
 # Run as a background service that restarts on boot
-docker run -d --name imsai-gw --restart unless-stopped -p 2323:2323 \
+docker run -d --name imsai-tty-gateway --restart unless-stopped -p 2323:2323 \
     ghcr.io/electricdream/imsai-tty-gateway:latest --host 192.168.1.50
 ```
 
@@ -154,9 +152,9 @@ sample.
 
 ```sh
 # These are equivalent ways to set the same options:
-./imsai-gw --host 192.168.1.50 --listen-port 2323
-IMSAI_GW_HOST=192.168.1.50 ./imsai-gw
-./imsai-gw --config imsai-gw.toml
+./imsai-tty-gateway --host 192.168.1.50 --listen-port 2323
+IMSAI_GW_HOST=192.168.1.50 ./imsai-tty-gateway
+./imsai-tty-gateway --config imsai-gw.toml
 ```
 
 | Option | CLI flag | Env var | Default | Meaning |
@@ -181,7 +179,7 @@ IMSAI_GW_HOST=192.168.1.50 ./imsai-gw
 | hotkey | `--hotkey` | `IMSAI_GW_HOTKEY` | `Ctrl+\` | key that opens the TUI |
 | log_level | `--log-level` | `IMSAI_GW_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 
-Run `./imsai-gw --help` for the full list.
+Run `./imsai-tty-gateway --help` for the full list.
 
 ## How it works (behavior notes)
 

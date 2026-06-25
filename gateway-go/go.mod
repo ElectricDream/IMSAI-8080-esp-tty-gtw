@@ -1,4 +1,4 @@
-module imsai-gw
+module imsai-tty-gateway
 
 go 1.23
 

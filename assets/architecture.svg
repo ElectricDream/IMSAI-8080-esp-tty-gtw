@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 190" role="img"
+     aria-label="A VT-100 terminal connects over TCP (telnet or raw) to the imsai-tty-gateway, which connects as a WebSocket client to ws://host/tty on the IMSAI 8080esp.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <g font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+    <!-- terminal -->
+    <rect x="20" y="55" width="210" height="80" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"/>
+    <text x="125" y="90" text-anchor="middle" font-size="18" font-weight="600" fill="#0f172a">VT-100 terminal</text>
+    <text x="125" y="113" text-anchor="middle" font-size="11.5" fill="#64748b">PuTTY, telnet, cool-retro-term</text>
+
+    <!-- gateway -->
+    <rect x="345" y="55" width="210" height="80" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="2.5"/>
+    <text x="450" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">imsai-tty-gateway</text>
+    <text x="450" y="112" text-anchor="middle" font-size="11" fill="#64748b">Telnet &#8596; WebSocket</text>
+
+    <!-- device -->
+    <rect x="670" y="55" width="210" height="80" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"/>
+    <text x="775" y="90" text-anchor="middle" font-size="18" font-weight="600" fill="#0f172a">IMSAI 8080esp</text>
+    <text x="775" y="113" text-anchor="middle" font-size="12" font-family="Consolas, Menlo, monospace" fill="#64748b">ws://&lt;host&gt;/tty</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#64748b" stroke-width="2">
+    <line x1="232" y1="95" x2="343" y2="95" marker-end="url(#arrow)"/>
+    <line x1="557" y1="95" x2="668" y2="95" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- arrow labels -->
+  <g font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#334155">
+    <rect x="231" y="69" width="113" height="20" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <text x="287.5" y="83" text-anchor="middle">TCP (telnet/raw)</text>
+
+    <rect x="565" y="69" width="95" height="20" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <text x="612.5" y="83" text-anchor="middle">WebSocket</text>
+  </g>
+</svg>

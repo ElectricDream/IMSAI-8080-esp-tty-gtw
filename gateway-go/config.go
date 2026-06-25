@@ -221,7 +221,7 @@ func mustChoice(name, val string, choices ...string) {
 func buildConfig() Config {
 	def := defaultConfig()
 
-	fs := flag.NewFlagSet("imsai-gw", flag.ExitOnError)
+	fs := flag.NewFlagSet("imsai-tty-gateway", flag.ExitOnError)
 	fConfig := fs.String("config", "", "TOML config file (env IMSAI_GW_CONFIG; default ./imsai-gw.toml if present)")
 	fHost := fs.String("host", def.Host, "IMSAI host/IP (env IMSAI_GW_HOST)")
 	fWSPort := fs.Int("ws-port", def.WSPort, "WebSocket port (env IMSAI_GW_WS_PORT)")
