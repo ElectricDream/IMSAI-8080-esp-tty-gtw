@@ -14,7 +14,37 @@ import (
 // HTTP client for the device's REST API (same host/port as the WebSocket, e.g. :80).
 // Used by the control TUI for disk and library operations.
 
-func httpClient() *http.Client { return &http.Client{Timeout: 5 * time.Second} }
+// httpTimeout bounds each control-API request. The device's single-threaded HTTP server can be
+// slow on the heavier list endpoints (e.g. /library?S stats every image) while /tty and /cpa are
+// active, so 5 s was too tight; 15 s plus one retry (httpGetBody) absorbs those slow responses.
+const httpTimeout = 15 * time.Second
+
+func httpClient() *http.Client { return &http.Client{Timeout: httpTimeout} }
+
+// httpGetBody does a GET and returns the response body, retrying ONCE on a transient error
+// (connection/timeout). It does NOT retry on an HTTP error status (that is deterministic).
+func httpGetBody(url, what string) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		resp, err := httpClient().Get(url)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("%s: HTTP %d", what, resp.StatusCode)
+		}
+		body, rerr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if rerr != nil {
+			lastErr = rerr
+			continue
+		}
+		return body, nil
+	}
+	return nil, fmt.Errorf("%s: %w", what, lastErr)
+}
 
 func deviceBase(cfg Config) string {
 	return fmt.Sprintf("http://%s:%d", cfg.Host, cfg.WSPort)
@@ -36,16 +66,12 @@ func isHardDisk(id, image string) bool {
 // (a bare /disks makes the device drop the connection), so a timestamp is appended.
 func getDisks(cfg Config) ([]driveEntry, error) {
 	url := fmt.Sprintf("%s/disks?%d", deviceBase(cfg), time.Now().UnixNano())
-	resp, err := httpClient().Get(url)
+	body, err := httpGetBody(url, "GET /disks")
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET /disks: HTTP %d", resp.StatusCode)
-	}
 	var m map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+	if err := json.Unmarshal(body, &m); err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(m))
@@ -69,19 +95,15 @@ func getDisks(cfg Config) ([]driveEntry, error) {
 // getLibrary returns the on-device disk image library filenames (GET /library?S), sorted.
 // The endpoint returns a JSON array of objects: [{"filename":"x.dsk","size":N}, ...].
 func getLibrary(cfg Config) ([]string, error) {
-	resp, err := httpClient().Get(deviceBase(cfg) + "/library?S")
+	body, err := httpGetBody(deviceBase(cfg)+"/library?S", "GET /library")
 	if err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET /library: HTTP %d", resp.StatusCode)
 	}
 	var arr []struct {
 		Filename string `json:"filename"`
 		Size     int64  `json:"size"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&arr); err != nil {
+	if err := json.Unmarshal(body, &arr); err != nil {
 		return nil, err
 	}
 	names := make([]string, 0, len(arr))
@@ -102,19 +124,15 @@ type libEntry struct {
 
 // getLibraryDetailed returns the library images with their sizes, sorted by filename.
 func getLibraryDetailed(cfg Config) ([]libEntry, error) {
-	resp, err := httpClient().Get(deviceBase(cfg) + "/library?S")
+	body, err := httpGetBody(deviceBase(cfg)+"/library?S", "GET /library")
 	if err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET /library: HTTP %d", resp.StatusCode)
 	}
 	var arr []struct {
 		Filename string `json:"filename"`
 		Size     int64  `json:"size"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&arr); err != nil {
+	if err := json.Unmarshal(body, &arr); err != nil {
 		return nil, err
 	}
 	out := make([]libEntry, 0, len(arr))
@@ -130,18 +148,14 @@ func getLibraryDetailed(cfg Config) ([]libEntry, error) {
 // getMachine returns the active machine profile id (GET /system?machine), used to build the
 // file-download path /<machine>/disks/<file>.
 func getMachine(cfg Config) (string, error) {
-	resp, err := httpClient().Get(deviceBase(cfg) + "/system?machine")
+	body, err := httpGetBody(deviceBase(cfg)+"/system?machine", "GET /system?machine")
 	if err != nil {
 		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET /system?machine: HTTP %d", resp.StatusCode)
 	}
 	var m struct {
 		Machine string `json:"machine"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+	if err := json.Unmarshal(body, &m); err != nil {
 		return "", err
 	}
 	if m.Machine == "" {
@@ -261,16 +275,12 @@ type sysInfo struct {
 
 // getSystem fetches and parses GET /system.
 func getSystem(cfg Config) (*sysInfo, error) {
-	resp, err := httpClient().Get(deviceBase(cfg) + "/system")
+	body, err := httpGetBody(deviceBase(cfg)+"/system", "GET /system")
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET /system: HTTP %d", resp.StatusCode)
-	}
 	var si sysInfo
-	if err := json.NewDecoder(resp.Body).Decode(&si); err != nil {
+	if err := json.Unmarshal(body, &si); err != nil {
 		return nil, err
 	}
 	return &si, nil
