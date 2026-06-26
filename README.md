@@ -5,7 +5,7 @@
      weight to the repository or the mirror. To set it: open a new GitHub issue (or edit this file
      in the GitHub web editor), drag-and-drop demo.mp4 into the text area, let GitHub upload it,
      then copy the generated https://github.com/user-attachments/assets/... URL into src below. -->
-<video src="https://github.com/user-attachments/assets/REPLACE-WITH-UPLOADED-MP4-URL" controls width="800"></video>
+<video src="https://github.com/user-attachments/assets/03259ff2-9b7d-45e8-975f-8dc7c7b8bceb" controls width="800"></video>
 
 Connect any VT-100 terminal (PuTTY, `telnet`, minicom, cool-retro-term, …) to the CP/M console
 of an IMSAI 8080esp over plain TCP, without a browser.
