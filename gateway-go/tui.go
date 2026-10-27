@@ -83,9 +83,15 @@ type key struct {
 	ch   byte
 }
 
+// escTimeout is how long a trailing ESC waits for the rest of an arrow/Page sequence before it is
+// taken as the Esc key. Clients (or serial-to-TCP bridges) can deliver ESC and "[B" in separate
+// segments; deciding at the end of a read turned such an arrow into Esc and closed the pane.
+const escTimeout = 250 * time.Millisecond
+
 // keyDecoder turns a byte stream into key events, handling CR/LF, lone Esc, the CSI/SS3 arrow
 // sequences (ESC [ A.. / ESC O A..) and the tilde-terminated keys Page Up (ESC [ 5 ~) and Page
-// Down (ESC [ 6 ~), any of which may span multiple reads.
+// Down (ESC [ 6 ~), any of which may span multiple reads. A trailing ESC is held (pending) until
+// more input arrives or the caller flushes it after escTimeout.
 type keyDecoder struct {
 	esc   int    // 0 = none, 1 = saw ESC, 2 = saw ESC[ or ESC O
 	param []byte // CSI numeric parameter collected in state 2 (e.g. "5" for Page Up)
@@ -154,11 +160,19 @@ func (d *keyDecoder) decode(data []byte) []key {
 			}
 		}
 	}
-	if d.esc == 1 { // a lone trailing ESC means the Esc key
-		keys = append(keys, key{kind: kEsc})
-		d.esc = 0
-	}
 	return keys
+}
+
+// pending reports a trailing ESC that may still be the start of a sequence.
+func (d *keyDecoder) pending() bool { return d.esc == 1 }
+
+// flush resolves a pending ESC as the Esc key (no sequence followed within escTimeout).
+func (d *keyDecoder) flush() []key {
+	if d.esc != 1 {
+		return nil
+	}
+	d.esc = 0
+	return []key{{kind: kEsc}}
 }
 
 // --- TUI model -------------------------------------------------------------------------
@@ -315,14 +329,30 @@ func (s *bridgeSession) exitTUI() {
 // tuiFeed consumes client input while the TUI is open; returns bytes consumed and whether
 // the TUI should close.
 func (s *bridgeSession) tuiFeed(data []byte) (consumed int, exited bool) {
-	m := s.tuiM
-	for _, k := range m.dec.decode(data) {
+	return len(data), s.tuiKeys(s.tuiM.dec.decode(data))
+}
+
+// tuiEscPending reports whether the TUI is holding a trailing ESC (see keyDecoder.pending).
+func (s *bridgeSession) tuiEscPending() bool {
+	return s.tuiM != nil && s.tuiM.dec.pending()
+}
+
+// tuiEscTimeout delivers a pending ESC as the Esc key once escTimeout passes with no more input.
+func (s *bridgeSession) tuiEscTimeout() {
+	if s.tuiKeys(s.tuiM.dec.flush()) {
+		s.exitTUI()
+	}
+}
+
+// tuiKeys applies key events and redraws; returns true if one of them closes the TUI.
+func (s *bridgeSession) tuiKeys(keys []key) bool {
+	for _, k := range keys {
 		if s.tuiKey(k) {
-			return len(data), true
+			return true
 		}
 	}
 	s.tuiDraw()
-	return len(data), false
+	return false
 }
 
 // tuiKey applies one key event; returns true to close the TUI.

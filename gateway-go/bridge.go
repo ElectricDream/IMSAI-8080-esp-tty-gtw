@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -53,6 +54,10 @@ type bridgeSession struct {
 	outBuf  []byte          // console output buffered while tui is true (replayed on exit)
 	hkMatch int             // bytes of the hotkey matched so far (bridge mode)
 	tuiM    *tuiModel       // TUI state, non-nil while tui is true
+
+	// stopping is set by runBridge before it forces a read deadline, so pumpTCPToWS can tell that
+	// stop apart from its own ESC-wait deadline (and never block again after overwriting it).
+	stopping atomic.Bool
 
 	// Front panel: /cpa opened ONCE at session start (while idle) and kept open. Opening it
 	// during live /tty traffic makes the device drop /tty, so we never (re)open it on demand.
@@ -219,7 +224,18 @@ func sendToWS(ws *websocket.Conn, data []byte, cfg Config) error {
 func (s *bridgeSession) pumpTCPToWS() string {
 	buf := make([]byte, 4096)
 	for {
+		escWait := s.tuiEscPending()
+		if escWait {
+			_ = s.conn.SetReadDeadline(time.Now().Add(escTimeout))
+		}
+		// Checked after any deadline change of ours, so a stop that raced with it is not lost.
+		if s.stopping.Load() {
+			return "stopped"
+		}
 		n, err := s.conn.Read(buf)
+		if escWait {
+			_ = s.conn.SetReadDeadline(time.Time{})
+		}
 		if n > 0 {
 			toWS, toClient := s.term.Process(buf[:n])
 			if len(toClient) > 0 {
@@ -233,6 +249,10 @@ func (s *bridgeSession) pumpTCPToWS() string {
 		}
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				if escWait && !s.stopping.Load() {
+					s.tuiEscTimeout() // nothing followed the ESC: it was the Esc key
+					continue
+				}
 				return "stopped" // read deadline set by runBridge; not a client disconnect
 			}
 			if err == io.EOF {
@@ -318,6 +338,7 @@ func (s *bridgeSession) runBridge(ws *websocket.Conn) string {
 	// Unblock the still-running pump: closing the WS ends a blocked ReadMessage/WriteMessage;
 	// a momentary read deadline ends a blocked conn.Read. Then collect the second result.
 	ws.Close()
+	s.stopping.Store(true)
 	if tc, ok := s.conn.(*net.TCPConn); ok {
 		_ = tc.SetReadDeadline(time.Now())
 	}
@@ -325,6 +346,7 @@ func (s *bridgeSession) runBridge(ws *websocket.Conn) string {
 	if tc, ok := s.conn.(*net.TCPConn); ok {
 		_ = tc.SetReadDeadline(time.Time{}) // clear, so the conn is reusable on reconnect
 	}
+	s.stopping.Store(false)
 	// If we tore down while the TUI was open, restore the normal screen so any reconnect
 	// messages / teardown happen on the console screen.
 	s.mu.Lock()
